@@ -35,11 +35,39 @@
 
 ### 2.1 核心架构设计分析
 - **文档路径**: `ReadCode/01_core_architecture.md`
+- **分析文件**:
+  - `src/transformers/__init__.py`（包结构与延迟加载机制）
+  - `src/transformers/modeling_utils.py`（PreTrainedModel 基类）
+  - `src/transformers/configuration_utils.py`（PreTrainedConfig 基类）
+  - `src/transformers/auto/`（Auto 类自动加载机制）
+  - `src/transformers/utils/import_utils.py`（导入与依赖管理）
+  - `src/transformers/file_utils.py`（文件操作与缓存）
 - **分析内容**:
   - 项目整体架构设计理念
-  - 主要类层次结构（PreTrainedModel, PreTrainedConfig）
+    - 统一 API 设计哲学
+    - 多模态支持架构
+    - 扩展性设计原则
+  - 主要类层次结构
+    - PreTrainedConfig 类层次结构详解
+    - PreTrainedModel 类层次结构详解
+    - PreTrainedTokenizer 类层次结构详解
+    - Pipeline 类层次结构
   - 模块化设计原则
+    - 模型文件结构规范
+    - 配置-模型-分词器分离设计
+    - Auto 类工厂模式实现
   - 多框架支持机制
+    - PyTorch/TensorFlow/JAX 框架适配层
+    - 模型权重跨框架转换
+    - 延迟加载与条件导入
+  - 包结构与模块组织
+    - 核心模块依赖关系图
+    - 延迟加载（LazyModule）实现原理
+    - 可选依赖管理策略
+  - 缓存与文件系统
+    - 模型缓存机制设计
+    - Hugging Face Hub 集成
+    - 本地文件存储结构
 
 ### 2.2 配置系统分析
 - **文档路径**: `ReadCode/02_configuration_system.md`
@@ -140,7 +168,9 @@
 ## 4. 输出要求
 
 - 所有文档保存在 `ReadCode/` 目录下
+- **每个文档开头必须包含一张概述图**，用于直观展示该模块的整体架构/流程
 - 每个模块的分析应包含：
+  - 概述图（放在最前面）
   - 设计理念
   - 核心类/函数详解
   - 代码流程图（如适用）
