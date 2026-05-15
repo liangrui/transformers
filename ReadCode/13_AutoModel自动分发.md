@@ -1,5 +1,43 @@
 # AutoModel 自动分发机制深入分析
 
+## AutoModel 架构总览
+
+```mermaid
+graph TB
+    subgraph "数据层"
+        A[auto_mappings.py<br/>CONFIG_MAPPING_NAMES]
+    end
+    
+    subgraph "懒加载映射层"
+        B[_LazyConfigMapping<br/>_LazyAutoMapping]
+    end
+    
+    subgraph "工厂基类层"
+        C[_BaseAutoModelClass<br/>from_pretrained<br/>from_config]
+    end
+    
+    subgraph "具体 Auto 类层"
+        D[AutoConfig]
+        E[AutoModel]
+        F[AutoModelForCausalLM]
+        G[AutoModelForSequenceClassification]
+        H[AutoTokenizer]
+    end
+    
+    subgraph "注册与扩展层"
+        I[register_for_auto_class<br/>register_model]
+    end
+    
+    A --> B
+    B --> C
+    C --> D
+    C --> E
+    C --> F
+    C --> G
+    C --> H
+    I --> B
+```
+
 ## 一、模块职责概述
 
 AutoModel 系列是 Hugging Face Transformers 的核心自动分发机制，其核心思想是：**用户只需指定模型名称或路径，框架根据配置文件中的 `model_type` 自动选择正确的模型类、配置类、分词器类进行实例化**。

@@ -1,5 +1,45 @@
 # Transformers CLI 与工具体系
 
+## CLI 与工具架构总览
+
+```mermaid
+graph TB
+    subgraph "入口层"
+        A[cli/transformers.py<br/>typer_factory]
+    end
+    
+    subgraph "命令层"
+        B[Chat<br/>cli/chat.py]
+        C[Serve<br/>cli/serve.py]
+        D[Download<br/>cli/download.py]
+        E[Env<br/>cli/system.py]
+        F[Version<br/>cli/system.py]
+        G[AddNewModelLike<br/>cli/add_new_model_like.py]
+    end
+    
+    subgraph "渲染层"
+        H[RichInterface<br/>终端富文本]
+        I[Console / Live / Markdown]
+    end
+    
+    subgraph "服务层"
+        J[OpenAI 兼容 API<br/>transformers serve]
+        K[AsyncInferenceClient]
+    end
+    
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F
+    A --> G
+    B --> H
+    H --> I
+    B --> K
+    C --> J
+    K --> J
+```
+
 ## 一、模块总览
 
 Transformers CLI 是 Hugging Face Transformers 库提供的命令行工具集，基于 `typer` 框架构建，遵循 Hugging Face 生态统一的 CLI 规范。它提供以下核心命令：

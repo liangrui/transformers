@@ -1,5 +1,46 @@
 # Pipeline 推理管道深入分析
 
+## Pipeline 架构总览
+
+```mermaid
+graph TB
+    subgraph "Pipeline 基类层"
+        A[Pipeline<br/>_ScikitCompat<br/>PushToHubMixin]
+        B[ChunkPipeline<br/>分块处理]
+    end
+    
+    subgraph "核心流程层"
+        C[preprocess]
+        D[forward]
+        E[postprocess]
+        F[_sanitize_parameters<br/>参数分发]
+    end
+    
+    subgraph "组件加载层"
+        G[Tokenizer<br/>文本处理]
+        H[ImageProcessor<br/>图像处理]
+        I[FeatureExtractor<br/>特征提取]
+        J[Processor<br/>多模态处理]
+    end
+    
+    subgraph "执行上下文层"
+        K[device_placement<br/>设备管理]
+        L[inference_context<br/>torch.no_grad]
+    end
+    
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    A --> F
+    C --> G
+    C --> H
+    C --> I
+    C --> J
+    D --> K
+    D --> L
+```
+
 ## 一、模块职责概述
 
 Pipeline 是 Hugging Face Transformers 提供的高层推理 API，旨在将模型推理的完整流程——**预处理 → 模型推理 → 后处理**——封装为一个简单易用的对象。用户只需一行代码 `pipeline("text-generation", model="...")` 即可完成从模型加载到推理输出的全过程。
