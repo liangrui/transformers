@@ -1,6 +1,6 @@
 # Hugging Face Transformers 源码全景解读
 
-> **项目版本**：v5.8.0.dev0 | **定位**：本系列文档的总纲，先总后分，统领全部 17 篇深度分析
+> **项目版本**：v5.8.0.dev0 | **定位**：本系列文档的总纲，先总后分，统领全部 21 篇深度分析
 
 ---
 
@@ -610,7 +610,63 @@ graph TB
 
 ## 六、模型实现范式
 
-### 6.1 一个模型的标准目录结构
+### 6.1 四大架构范式
+
+Transformers 中的模型可以分为四种架构范式，每种范式在注意力、缓存、生成方式上都有本质区别：
+
+```mermaid
+graph TB
+    subgraph "Encoder-Only<br/>BERT / RoBERTa / DeBERTa"
+        direction TB
+        BI["input_ids"] --> BE["Embedding"]
+        BE --> BL["Encoder × N<br/>双向注意力"]
+        BL --> BH["任务头<br/>分类/标注/问答"]
+    end
+
+    subgraph "Decoder-Only<br/>GPT-2 / LLaMA / Qwen"
+        direction TB
+        DI["input_ids"] --> DE["Embedding"]
+        DE --> DL["Decoder × N<br/>因果注意力"]
+        DL --> DH["lm_head<br/>自回归生成"]
+    end
+
+    subgraph "Encoder-Decoder<br/>T5 / BART / mBART"
+        direction TB
+        TI["input_ids"] --> TE["Encoder × N<br/>双向注意力"]
+        TE --> TC["Cross-Attention"]
+        TD["decoder_ids"] --> TD2["Decoder × N<br/>因果注意力"]
+        TD2 --> TC
+        TC --> TH["lm_head<br/>Seq2Seq 生成"]
+    end
+
+    subgraph "混合架构<br/>Qwen3.5-MoE / DeepSeek-V3"
+        direction TB
+        MI["多模态输入"] --> ME["Vision Encoder"]
+        ME --> MF["融合层"]
+        MF --> MM["MoE Decoder × N<br/>full_attn + linear_attn"]
+        MM --> MH["lm_head<br/>多模态生成"]
+    end
+
+    BI -.- DI
+    DI -.- TI
+    TI -.- MI
+
+    style BI fill:#1565c0,color:#fff
+    style DI fill:#2e7d32,color:#fff
+    style TI fill:#e65100,color:#fff
+    style MI fill:#c62828,color:#fff
+```
+
+| 维度 | Encoder-Only | Decoder-Only | Encoder-Decoder | 混合架构 |
+|------|-------------|-------------|----------------|---------|
+| 注意力 | 双向 | 因果 | 编码器双向 + 解码器因果 + 交叉 | 混合（full + linear） |
+| 缓存 | 无 | DynamicCache | EncoderDecoderCache | 混合缓存 |
+| 生成 | 不支持 | 自回归 | Seq2Seq 自回归 | 多模态条件生成 |
+| 位置编码 | 绝对/学习 | RoPE | 相对桶偏置 | M-RoPE |
+| 典型模型 | BERT | GPT-2, LLaMA | T5, BART | Qwen3.5-MoE |
+| 案例文档 | [17 BERT](17_BERT案例详解.md) | [18 GPT-2](18_GPT案例详解.md) | [19 T5](19_T5案例详解.md) | [20 Qwen3.5](20_Qwen3.5系列详解.md) |
+
+### 6.2 一个模型的标准目录结构
 
 以 LLaMA 为例，每个模型遵循统一的文件组织：
 
@@ -631,7 +687,7 @@ models/llama/
 └── modular_llama.py               # [可选] Modular 复用
 ```
 
-### 6.2 Decoder-only 模型的组件层次
+### 6.3 Decoder-only 模型的组件层次
 
 ```mermaid
 graph TB
@@ -668,7 +724,7 @@ graph TB
     MLP --> Norm
 ```
 
-### 6.3 V5 Modular 模式——代码复用的新范式
+### 6.4 V5 Modular 模式——代码复用的新范式
 
 V5 引入 `modular_*.py`，允许模型通过继承复用已有组件，而非复制粘贴：
 
@@ -776,7 +832,7 @@ mindmap
 
 ## 九、文档导航——先总后分
 
-本系列共 **18 篇**文档，建议按以下顺序阅读：
+本系列共 **21 篇**文档（1 篇总纲 + 16 篇模块分析 + 4 篇案例详解），建议按以下顺序阅读：
 
 ```mermaid
 graph TB
@@ -806,8 +862,19 @@ graph TB
 
     ROOT --> P0["🎯 00 设计模式总结<br/>注册表 · Mixin · 工厂 · 策略 · 模板方法 · 观察者"]
 
+    ROOT --> Cases["📚 案例详解系列<br/>四大架构范式 · 从经典到前沿"]
+    Cases --> P17["📘 17 BERT 案例详解<br/>Encoder-Only · 双向注意力"]
+    Cases --> P18["📗 18 GPT 案例详解<br/>Decoder-Only · 因果注意力 · KV Cache"]
+    Cases --> P19["📙 19 T5 案例详解<br/>Encoder-Decoder · 交叉注意力 · EncoderDecoderCache"]
+    Cases --> P20["📕 20 Qwen3.5 系列详解<br/>MoE · 线性注意力 · 多模态 · M-RoPE"]
+
     style ROOT fill:#ff6f00,color:#fff
     style P0 fill:#7c4dff,color:#fff
+    style Cases fill:#00695c,color:#fff
+    style P17 fill:#1565c0,color:#fff
+    style P18 fill:#2e7d32,color:#fff
+    style P19 fill:#e65100,color:#fff
+    style P20 fill:#c62828,color:#fff
 ```
 
 ### 阅读路径建议
@@ -823,6 +890,17 @@ graph TB
 
 **路径 D：扩展与维护（5 篇）**
 > [13 AutoModel](13_AutoModel自动分发.md) → [14 模型实现模式](14_模型实现模式.md) → [08 多模态处理](08_多模态处理系统.md) → [15 CLI](15_CLI与工具.md) → [16 测试体系](16_测试体系.md)
+
+**路径 E：案例详解——四大架构范式（4 篇）**
+
+> [17 BERT](17_BERT案例详解.md) → [18 GPT-2](18_GPT案例详解.md) → [19 T5](19_T5案例详解.md) → [20 Qwen3.5-MoE](20_Qwen3.5系列详解.md)
+
+```
+BERT (Encoder-Only) → GPT-2 (Decoder-Only) → T5 (Encoder-Decoder) → Qwen3.5-MoE (混合架构)
+  双向注意力            因果注意力 + KV Cache    交叉注意力 + 双缓存      MoE + 线性注意力 + 多模态
+```
+
+每篇案例详解将前面 16 篇模块分析的知识具象化，展示从 `from_pretrained()` 到 `generate()` 的完整生命周期，包含时序图、状态机图、数据流图等。
 
 ---
 
@@ -888,3 +966,24 @@ src/transformers/
 | **模型实现** | 7 层组件（Norm → RoPE → Attention → MLP → Layer → Model → ForCausalLM） |
 | **CLI** | Chat-Serve 分离架构，FastAPI + Uvicorn 服务端 |
 | **测试** | Mixin 继承自动获得数百个通用测试，CI 根据 git diff 智能选择测试 |
+
+### 案例详解——四大架构范式
+
+| 案例 | 架构范式 | 核心特征 | 关键差异点 |
+|------|---------|---------|-----------|
+| **[17 BERT](17_BERT案例详解.md)** | Encoder-Only | 双向注意力、WordPiece、MLM+NSP | 不需要 KV Cache，无 `generate()` |
+| **[18 GPT-2](18_GPT案例详解.md)** | Decoder-Only | 因果注意力、BPE、自回归生成 | Conv1D 线性层、Post-Norm、wte↔lm_head 绑定 |
+| **[19 T5](19_T5案例详解.md)** | Encoder-Decoder | 交叉注意力、Unigram、Seq2Seq 生成 | 相对位置桶偏置、EncoderDecoderCache、三处权重绑定 |
+| **[20 Qwen3.5-MoE](20_Qwen3.5系列详解.md)** | 混合架构 | MoE+线性注意力+多模态 | 256 专家路由、GatedDeltaNet、M-RoPE、视觉编码器 |
+
+---
+
+## 十二、文档统计
+
+| 类别 | 文档数 | 总行数 | Mermaid 图数 |
+|------|--------|--------|-------------|
+| 总纲（README） | 1 | ~900 | 15+ |
+| 设计模式总结 | 1 | 487 | 6+ |
+| 模块分析（01-16） | 16 | ~16,000 | 100+ |
+| 案例详解（17-20） | 4 | ~4,100 | 40+ |
+| **合计** | **22** | **~21,500** | **160+** |
