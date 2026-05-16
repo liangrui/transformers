@@ -320,6 +320,119 @@ flowchart TB
 
 ## 五、六大子系统纵览
 
+### 六大子系统全景关系图
+
+六大子系统并非孤立运作，而是围绕 `PreTrainedModel` 形成紧密协作的网络。下图展示它们之间的完整交互关系：
+
+```mermaid
+graph TB
+    subgraph Model["🧠 PreTrainedModel — 核心枢纽"]
+        direction LR
+        FP["from_pretrained()"]
+        FW["forward()"]
+        GEN["generate()"]
+    end
+
+    subgraph S1["👁️ 注意力系统"]
+        direction TB
+        ATTN["AttentionInterface<br/>SDPA / Flash / Flex / Eager / Paged"]
+        MASK["masking_utils<br/>causal / sliding / 组合掩码"]
+        ROPE["RoPE<br/>default / dynamic / yarn / llama3"]
+        ATTN --- MASK
+        ATTN --- ROPE
+    end
+
+    subgraph S2["💾 缓存系统"]
+        direction TB
+        DC["DynamicCache<br/>自动分发异构层"]
+        SC["StaticCache<br/>torch.compile 友好"]
+        QC2["QuantizedCache<br/>量化 KV"]
+    end
+
+    subgraph S3["📊 量化系统"]
+        direction TB
+        QCFG["QuantizationConfig<br/>配置驱动"]
+        QEXEC["HfQuantizer<br/>preprocess → postprocess"]
+        QCFG -->|"AutoHfQuantizer"| QEXEC
+    end
+
+    subgraph S4["🌐 分布式系统"]
+        direction TB
+        DS["DeepSpeed / FSDP"]
+        TP["Tensor Parallel<br/>15 种策略"]
+        MOE["MoE 专家并行"]
+        ACC["Accelerate<br/>device_map + offload"]
+    end
+
+    subgraph S5["🔤 分词器系统"]
+        direction TB
+        TOK["PreTrainedTokenizerBase<br/>四后端统一"]
+        CT["Chat Template<br/>Jinja2 渲染"]
+        CP["Chat Parsing<br/>Schema 解析"]
+        TOK --- CT
+        CT --- CP
+    end
+
+    subgraph S6["🖼️ 多模态处理系统"]
+        direction TB
+        PROC["ProcessorMixin<br/>模态自动分发"]
+        IMG["图像处理<br/>PIL / Torchvision"]
+        AUD["音频处理<br/>Mel 频谱"]
+        VID["视频处理<br/>5 种解码后端"]
+        PROC --- IMG
+        PROC --- AUD
+        PROC --- VID
+    end
+
+    FP ==>|"1. 量化预处理<br/>替换 Linear 层"| QEXEC
+    FP ==>|"2. 权重转换<br/>WeightConverter"| QCFG
+    FP ==>|"3. 设备分配<br/>device_map"| ACC
+    FP ==>|"4. TP 策略<br/>tp_plan"| TP
+    QEXEC -.->|"量化 KV"| QC2
+
+    FW ==>|"注意力计算"| ATTN
+    FW ==>|"KV 读写"| DC
+    FW ==>|"MoE 专家分发"| MOE
+    DC -.->|"静态缓存<br/>编译部署"| SC
+
+    GEN ==>|"自回归循环"| ATTN
+    GEN ==>|"KV Cache 增量更新"| DC
+    GEN ==>|"分词 + 解码"| TOK
+    GEN ==>|"多模态输入"| PROC
+
+    TOK ==>|"token_ids"| FW
+    PROC ==>|"pixel_values / audio_features"| FW
+
+    DS -.->|"ZeRO-3<br/>权重分片"| FP
+    TP -.->|"通信 Hook<br/>注入模型"| FW
+
+    style Model fill:#ff6f00,color:#fff,stroke:#e65100
+    style S1 fill:#e3f2fd,stroke:#1565c0
+    style S2 fill:#f3e5f5,stroke:#7b1fa2
+    style S3 fill:#fff3e0,stroke:#e65100
+    style S4 fill:#e8f5e9,stroke:#2e7d32
+    style S5 fill:#fce4ec,stroke:#c62828
+    style S6 fill:#e0f7fa,stroke:#00695c
+```
+
+**关系解读**：
+
+| 交互路径 | 含义 |
+|---------|------|
+| `from_pretrained → 量化` | 加载时量化器替换 Linear 层，量化配置决定替换策略 |
+| `from_pretrained → 分布式` | 加载时根据 `device_map` 分配设备，根据 `tp_plan` 注入通信 Hook |
+| `量化 → 缓存` | 量化模型使用 `QuantizedCache` 存储量化后的 KV 状态 |
+| `forward → 注意力` | 每次前向传播调用注意力函数，由 `config._attn_implementation` 选择实现 |
+| `forward → 缓存` | 注意力计算时读写 KV Cache，`DynamicCache` 自动分发异构层 |
+| `forward → MoE` | MoE 模型的专家层通过分布式系统分发到不同设备 |
+| `generate → 注意力 + 缓存` | 自回归生成循环中反复调用注意力 + 增量更新 KV Cache |
+| `generate → 分词器` | 生成前编码输入，生成后解码输出 |
+| `generate → 多模态` | 多模态模型生成时需要处理图像/音频/视频输入 |
+| `分词器 → forward` | 分词器输出的 `input_ids` 是模型前向传播的输入 |
+| `多模态 → forward` | Processor 输出的 `pixel_values` / `audio_features` 是多模态模型的输入 |
+| `DeepSpeed → from_pretrained` | ZeRO-3 模式下权重分片加载 |
+| `TP → forward` | 张量并行通过 Hook 在前向传播中注入通信操作 |
+
 ### 5.1 注意力系统——策略模式的典范
 
 ```mermaid
